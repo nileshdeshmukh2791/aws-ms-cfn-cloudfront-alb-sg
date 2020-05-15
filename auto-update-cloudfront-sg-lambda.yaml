@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Stack For Automatic Update Your Security Groups for Amazon CloudFront Using AWS Lambda.
+
+Parameters:
+
+  BucketName:
+
+    Type: String
+    Description: "Enter bucket name where your lambda zip file resides"
+    Default: cloudfront-alb-security-lambda-code
+
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Description: "VPC Id"
+
+Resources:
+
+  CloudfrontAlbSecurityGroup:
+    #- Fn::ImportValue: !Sub '${AWS::StackName}-AlbSecurityGroup'
+
+  CloudfrontAlbSecurityLambdaRole:
+
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+          Action:
+            - 'sts:AssumeRole'
+      Path: /service-role/
+      #RoleName: 'CloudfrontAlbSecurityLambdaRole'
+
+  CloudfrontAlbSecurityLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CloudfrontAlbSecurityLambdaPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: arn:aws:logs:*:*:*
+        - Effect: Allow
+          Action:
+          - ec2:DescribeSecurityGroups
+          - ec2:AuthorizeSecurityGroupIngress
+          - ec2:RevokeSecurityGroupIngress
+          Resource: "*"
+      Roles:
+        - !Ref CloudfrontAlbSecurityLambdaRole
+
+  CloudfrontAlbSecurityLambdaS3Policy:
+
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CloudfrontAlbSecurityLambdaS3Policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+         - Effect: Allow
+           Action:
+
+             - 's3:AbortMultipartUpload'
+             - 's3:GetBucketLocation'
+             - 's3:GetObject'
+             - 's3:ListBucket'
+             - 's3:ListBucketMultipartUploads'
+             - 's3:PutObject'      
+           Resource:
+
+            Fn::GetAtt: 
+             #- !Sub 'arn:aws:s3:::CloudfrontAlbSecurityLambda'
+
+      Roles:
+        - !Ref CloudfrontAlbSecurityLambdaRole
+
+  CloudfrontAlbSecurityLambda:
+
+    Type: 'AWS::Lambda::Function'
+    DependsOn: CloudfrontAlbSecurityLambdaRole 
+    Properties:
+
+      Code:
+        S3Bucket: !Ref BucketName
+        S3Key: 'cloudfront-alb-security.zip'      
+      Description: 'Lambda'
+      FunctionName: 'CloudfrontAlbSecurityLambda'
+
+      Handler: "cloudfront-alb-security.lambda_handler"
+      MemorySize: '256'
+
+      Role: 
+        Fn::GetAtt: CloudfrontAlbSecurityLambdaRole.Arn
+      Runtime: 'python3.8'
+      Timeout: '300' 
+    
+Outputs:
+
+
+  CloudfrontAlbSecurityLambdaARN:
+    Description: CloudfrontAlbSecurity lambda ARN
+    Value:
+      Fn::GetAtt: CloudfrontAlbSecurityLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudfrontAlbSecurityLambdaARN'
